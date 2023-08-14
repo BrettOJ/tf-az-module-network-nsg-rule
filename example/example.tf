@@ -1,0 +1,90 @@
+locals {
+  tags = {
+    "created-by" = "Terraform"
+ 
+  }
+
+  naming_convention_info = {
+    name         = "eg"
+    project_code = "boj"
+    env          = "dev"
+    zone         = "z1"
+    agency_code  = "brettoj"
+    tier         = "web"
+  }
+}
+
+module "resource_groups" {
+  source = "git::https://github.com/BrettOJ/tf-az-module-resource-group?ref=main"
+  resource_groups = {
+    1 = {
+      name                   = var.resource_group_name
+      location               = var.location
+      naming_convention_info = local.naming_convention_info
+      tags = {
+
+      }
+    }
+  }
+}
+
+module "azure_virtual_network"  {
+  source = "git::https://github.com/BrettOJ/tf-az-module-virtual-network?ref=main"
+  address_space       = ["10.0.0.0/16"]
+  location            = var.location
+  resource_group_name = module.resource_groups.rg_output[1].name
+  naming_convention_info = local.naming_convention_info
+}
+
+module "azure_subnet" {
+  source = "git::https://github.com/BrettOJ/tf-az-module-network-subnet?ref=main"
+  resource_group_name  = module.resource_groups.rg_output[1].name
+  virtual_network_name = module.azure_virtual_network.vnets_output.name
+  location               = var.location
+  naming_convention_info = local.naming_convention_info
+  tags                   = local.tags
+  create_nsg = var.create_nsg
+  subnets = {
+  001 = {
+      name              = var.subnet_name
+      address_prefixes  = ["10.0.1.0/24"]
+      service_endpoints = null
+      private_endpoint_network_policies_enabled = null
+      route_table_id    = null
+      delegation  = null
+      nsg_inbound = []
+      nsg_outbound = [
+    ]
+    }
+  }
+}
+
+## Use this to add the NSG to the subnet created above
+
+module "inbound-nsg" {
+    source              = "git::https://github.com/BrettOJ/tf-az-module-network-nsg-rule?ref=main"
+    resource_group_name = module.resource_groups.rg_output[1].name
+    nsg_name            = module.azure_subnet.snet_nsg_output[1].nsg_info.name
+
+  inbound_rules = [
+    {
+    priority                                   = "100"
+    access                                     = "Allow"
+    protocol                                   = "*"
+    source_port_range                          = "*"
+    destination_port_range                     = "*"
+    source_address_prefix                      = "*"
+    destination_address_prefix                 = "*"
+    source_port_ranges                         = null
+    destination_port_ranges                    = null
+    source_address_prefixes                    = null
+    destination_address_prefixes               = null
+    source_application_security_group_ids      = null
+    destination_application_security_group_ids = null
+    }
+  ]
+  outbound_rules = null
+}
+
+
+
